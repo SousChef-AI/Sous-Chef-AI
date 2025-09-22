@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listen, speak } from "./lib/voice";
+import { LLM_MODE } from "./lib/config";
+import { assistLLM, computeNutrition, searchRecipes, getRecipe } from "./lib/api";
+import { puterElaborateStep } from "./lib/puter";
 
 type Meal = {
   id: string;
@@ -96,6 +99,22 @@ export default function App() {
       setResults([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onElaborateStep() {
+    if (!meal) return;
+    try {
+      const res =
+        LLM_MODE === "puter"
+          ? await puterElaborateStep(meal, stepIdx, {})
+          : await assistLLM({ recipe: meal, step_index: stepIdx, constraints: {} });
+
+      speak(res.text);
+      // also consider showing res.text under the step UI
+    } catch (err: any) {
+      speak("Sorry, the assistant is unavailable right now.");
+      console.error(err);
     }
   }
 
@@ -209,7 +228,7 @@ export default function App() {
     <div className="min-h-full bg-indigo-50 text-slate-800">
       <header className="sticky top-0 bg-indigo-600 text-white shadow p-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-semibold">Sous Chef AI (MVP)</h1>
+          <h1 className="text-xl font-semibold">Sous Chef AI</h1>
           <div className="flex gap-2">
             {!listening ? (
               <button
@@ -338,7 +357,12 @@ export default function App() {
                     onClick={repeatStep}
                     className="px-3 py-2 rounded-xl border"
                   >
-                    🔊 Repeat
+                    🔊 Repessssat
+                  </button>
+                  <button 
+                    onClick={onElaborateStep}
+                    className="px-3 py-2 rounded-xl border">
+                    ✨ Elaborate step
                   </button>
                   <button
                     onClick={nextStep}
@@ -347,6 +371,8 @@ export default function App() {
                   >
                     Next ▶
                   </button>
+                  
+
                 </div>
               </div>
 
@@ -420,3 +446,5 @@ function TimerBadge({
     </div>
   );
 }
+
+
