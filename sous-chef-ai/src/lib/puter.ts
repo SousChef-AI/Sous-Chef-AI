@@ -23,22 +23,29 @@ export async function puterElaborateStep(
   const title = recipe.title ?? "Untitled recipe";
   const servings = recipe.servings ?? 1;
 
-  const system = `You are a precise, safety-conscious cooking assistant.
-- Elaborate concisely on the requested step only.
-- If timing is implied, suggest a range and when to set a timer.
-- Clarify temperature, texture cues, and doneness checks when relevant.
-- Suggest safe substitutions only if asked via constraints.
-- Do NOT invent ingredient quantities.`;
+  const system = `You are an expert sous chef providing real-time cooking guidance. Your responses should be:
+- ACTIONABLE: Give specific techniques, not just descriptions
+- SENSORY: Include what to look for, smell for, hear, and feel
+- TIMING: Provide precise time ranges and when to check progress
+- TROUBLESHOOTING: Mention common mistakes and how to avoid them
+- SAFETY-FIRST: Always prioritize food safety and kitchen safety
+- CONCISE: Keep responses focused and practical (3-5 sentences max)
 
-  const user = `Recipe: ${title}
-Servings: ${servings}
-Constraints: ${JSON.stringify(constraints ?? {})}
-Ingredients: ${JSON.stringify(recipe.ingredients ?? [])}
+Format responses for voice reading - use natural, conversational language.`;
 
-Current step #${stepIndex + 1}:
-${step}
+  const user = `Recipe: "${title}" (${servings} servings)
+${constraints && Object.keys(constraints).length > 0 ? `Special requirements: ${JSON.stringify(constraints)}` : ''}
 
-Please elaborate this step in 3–6 sentences, practical and safe.`;
+CURRENT STEP ${stepIndex + 1}: "${step}"
+
+Available ingredients: ${recipe.ingredients?.map((ing: any) => `${ing.quantity || ''} ${ing.name || ing}`).join(', ') || 'Not specified'}
+
+Provide detailed guidance for this step including:
+1. Specific technique tips
+2. What to watch/listen/smell for
+3. Timing and temperature if relevant
+4. How to know when it's done correctly
+5. One common mistake to avoid`;
 
   const model = opts?.model ?? "gpt-4o";
   // Puter’s API usually expects a single prompt string; some variants allow messages.
