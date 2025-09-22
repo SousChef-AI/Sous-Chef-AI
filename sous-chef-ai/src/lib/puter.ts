@@ -61,3 +61,52 @@ Provide detailed guidance for this step including:
   const text = typeof resp === "string" ? resp : (resp?.text ?? String(resp));
   return { text };
 }
+
+export async function puterHelpFromText(
+  prompt: string,
+  recipe: any,
+  stepIndex: number,
+  constraints?: any,
+  opts?: PuterChatOptions
+): Promise<{ text: string }> {
+  if (!window.puter?.ai?.chat) {
+    throw new Error("Puter.js is not available on window.puter.ai.chat");
+  }
+
+  const userPrompt = prompt; 
+  const step = recipe.instructions?.[stepIndex] ?? "";
+  const title = recipe.title ?? "Untitled recipe";
+  const servings = recipe.servings ?? 1;
+
+  const system = `You are an expert sous chef providing real-time cooking guidance. Your responses should be:
+Here is the prompt from the user that you need to answer based on the information that you have: " ${(userPrompt)}
+Format responses for voice reading - use natural, conversational language.`;
+
+  const user = `Recipe: "${title}" (${servings} servings)
+${constraints && Object.keys(constraints).length > 0 ? `Special requirements: ${JSON.stringify(constraints)}` : ''}
+
+CURRENT STEP ${stepIndex + 1}: "${step}"
+
+Available ingredients: ${recipe.ingredients?.map((ing: any) => `${ing.quantity || ''} ${ing.name || ing}`).join(', ') || 'Not specified'}
+
+Provide detailed guidance for this step including:
+1. Specific technique tips
+2. What to watch/listen/smell for
+3. Timing and temperature if relevant
+4. How to know when it's done correctly
+5. One common mistake to avoid`;
+
+  const model = opts?.model ?? "gpt-4o";
+  // Puter’s API usually expects a single prompt string; some variants allow messages.
+  const resp = await window.puter.ai.chat(
+    [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    { model }
+  );
+
+  // Normalize response into text
+  const text = typeof resp === "string" ? resp : (resp?.text ?? String(resp));
+  return { text };
+}
