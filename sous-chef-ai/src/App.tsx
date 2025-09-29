@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listen, speak } from "./lib/voice";
 import { LLM_MODE } from "./lib/config";
-import { assistLLM, computeNutrition, searchRecipes, getRecipe } from "./lib/api";
-import { puterElaborateStep } from "./lib/puter";
-import { puterHelpFromText } from "./lib/puter";
+import { assistLLM } from "./lib/api";
+import { puterElaborateStep, puterHelpFromText, puterGeneralHelp } from "./lib/puter";
 
 type Meal = {
   id: string;
@@ -62,6 +61,8 @@ export default function App() {
 
   const [assistText, setAssistText] = useState<string>("");        // latest response text
   const [assistLoading, setAssistLoading] = useState<boolean>(false);
+  const [chatOpen, setChatOpen] = useState<boolean>(false);
+  
   // keep a 1s ticker for timers
   useEffect(() => {
     tickRef.current = window.setInterval(() => forceTick((n) => n + 1), 1000);
@@ -123,35 +124,36 @@ export default function App() {
     }
   }
 
-  function handleUserText(text: string) {
-    // 👉 Replace this with your own calls
-    console.log("User text:", text);
-    // Example placeholder:
-    speak(`You entered: ${text}`);
-  }
-
   async function submitUserText() {
     const text = userText.trim();
     if (!text) return;
 
-    if (!meal) return;
     try {
-      setAssistLoading(true);                   // NEW
-      const res =
-        LLM_MODE === "puter"
+      setAssistLoading(true);
+      let res;
+      
+      if (meal) {
+        // User has an active recipe - provide context-aware assistance
+        res = LLM_MODE === "puter"
           ? await puterHelpFromText(text, meal, stepIdx, {})
           : await assistLLM({ recipe: meal, step_index: stepIdx, constraints: {} });
+      } else {
+        // No active recipe - provide general cooking assistance
+        res = LLM_MODE === "puter"
+          ? await puterGeneralHelp(text)
+          : { text: "Please select a recipe first to get cooking assistance." };
+      }
 
-      const reply = res?.text ?? String(res);   // NEW
-      setAssistText(reply);                     // NEW
-      speak(reply);                             // speak it as well
+      const reply = res?.text ?? String(res);
+      setAssistText(reply);
+      speak(reply);
     } catch (err: any) {
       const msg = "Sorry, the assistant is unavailable right now.";
-      setAssistText(msg);                       // NEW
+      setAssistText(msg);
       speak(msg);
       console.error(err);
     } finally {
-      setAssistLoading(false);                  // NEW
+      setAssistLoading(false);
     }
     setUserText("");
   }
@@ -268,22 +270,6 @@ export default function App() {
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-semibold">Sous Chef AI</h1>
           <div className="flex gap-2">
-            <div className="hidden md:flex items-center gap-2">
-              <input
-                value={userText}
-                onChange={(e) => setUserText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && submitUserText()}
-                className="px-3 py-2 rounded-xl bg-white/10 border border-white/20 placeholder-white/70 text-white w-72"
-                placeholder="Type text and press Enter"
-              />
-              <button
-                onClick={submitUserText}
-                className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20"
-                title="Send text"
-              >
-                ➤ Send
-              </button>
-            </div>
             {!listening ? (
               <button
                 onClick={startListening}
@@ -308,70 +294,11 @@ export default function App() {
             >
               🔊 Repeat
             </button>
-            <div className="md:hidden max-w-5xl mx-auto pt-3">
-              <div className="flex items-center gap-2">
-                <input
-                  value={userText}
-                  onChange={(e) => setUserText(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && submitUserText()}
-                  className="flex-1 px-3 py-2 rounded-xl bg-white/10 border border-white/20 placeholder-white/70 text-white"
-                  placeholder="Type text and press Enter"
-                />
-                <button
-                  onClick={submitUserText}
-                  className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20"
-                  title="Send text"
-                >
-                  ➤
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto p-6 space-y-6">
-        {/* Assistant response panel */}
-        <section className="bg-white rounded-2xl shadow p-6 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Assistant Response</h2>
-            <div className="flex gap-2">
-              <button
-                onClick={() => assistText && navigator.clipboard.writeText(assistText)}
-                className="px-3 py-1.5 rounded-lg border disabled:opacity-40"
-                disabled={!assistText}
-                title="Copy text"
-              >
-                📋 Copy
-              </button>
-              <button
-                onClick={() => assistText && speak(assistText)}
-                className="px-3 py-1.5 rounded-lg border disabled:opacity-40"
-                disabled={!assistText}
-                title="Speak again"
-              >
-                🔊 Speak
-              </button>
-              <button
-                onClick={() => setAssistText("")}
-                className="px-3 py-1.5 rounded-lg border"
-                title="Clear"
-              >
-                ✖ Clear
-              </button>
-            </div>
-          </div>
-
-          <div
-            className="min-h-20 max-h-60 overflow-auto rounded-xl border bg-slate-50 p-3 text-slate-800 leading-7 whitespace-pre-wrap"
-            aria-busy={assistLoading}
-          >
-            {assistLoading
-              ? "Thinking…"
-              : (assistText || "No response yet. Type a question or instruction above.")}
-          </div>
-        </section>
-
         {/* Search */}
         {!meal && (
           <section className="bg-white rounded-2xl shadow p-6 space-y-4">
@@ -493,8 +420,8 @@ export default function App() {
               </p>
 
               <div className="text-xs text-slate-500">
-                Try voice: “next”, “previous”, “repeat”, or “set pasta timer to 9
-                minutes”.
+                Try voice: "next", "previous", "repeat", or "set pasta timer to 9
+                minutes".
               </div>
             </section>
 
@@ -529,6 +456,18 @@ export default function App() {
         )}
       </main>
 
+      {/* Floating Chat Widget */}
+      <ChatWidget 
+        isOpen={chatOpen}
+        onToggle={() => setChatOpen(!chatOpen)}
+        userText={userText}
+        setUserText={setUserText}
+        assistText={assistText}
+        assistLoading={assistLoading}
+        onSubmit={submitUserText}
+        onClear={() => setAssistText("")}
+      />
+
     </div>
   );
 }
@@ -560,4 +499,154 @@ function TimerBadge({
   );
 }
 
+function ChatWidget({
+  isOpen,
+  onToggle,
+  userText,
+  setUserText,
+  assistText,
+  assistLoading,
+  onSubmit,
+  onClear,
+}: {
+  isOpen: boolean;
+  onToggle: () => void;
+  userText: string;
+  setUserText: (text: string) => void;
+  assistText: string;
+  assistLoading: boolean;
+  onSubmit: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <>
+      {/* Chat Panel - positioned independently */}
+      {isOpen && (
+        <div className="fixed bottom-20 right-4 sm:bottom-24 sm:right-6 z-50 bg-white rounded-xl shadow-2xl w-96 sm:w-80 max-w-[calc(100vw-2rem)] flex flex-col transform transition-all duration-200 chat-slide-up">
+          {/* Header - Minimized */}
+          <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-t-xl">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></div>
+              <h3 className="font-medium text-sm">Sous Chef AI</h3>
+            </div>
+            <button
+              onClick={onToggle}
+              className="text-white/80 hover:text-white p-0.5 rounded hover:bg-white/10 transition-colors text-sm"
+              title="Close chat"
+            >
+              ✕
+            </button>
+          </div>
 
+          {/* Chat Messages - Dynamic height based on content */}
+          <div className={`overflow-y-auto px-3 py-2 bg-gray-50/30 ${
+            assistText 
+              ? assistText.length > 200 
+                ? 'min-h-32 max-h-80' 
+                : assistText.length > 100 
+                  ? 'min-h-24 max-h-60' 
+                  : 'min-h-20 max-h-40'
+              : 'min-h-16 max-h-32'
+          }`}>
+            {assistText ? (
+              <div className="space-y-2">
+                {/* AI Response */}
+                <div className="flex gap-2 items-start">
+                  <div className="w-6 h-6 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 mt-1">
+                    AI
+                  </div>
+                  <div className="bg-white rounded-lg rounded-tl-sm px-3 py-2 shadow-sm flex-1 leading-relaxed text-slate-800 text-sm whitespace-pre-wrap">
+                    {assistLoading ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                          <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce"></div>
+                          <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce bounce-delay-1"></div>
+                          <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce bounce-delay-2"></div>
+                        </div>
+                        <span className="text-slate-500 text-xs">Thinking...</span>
+                      </div>
+                    ) : (
+                      assistText
+                    )}
+                  </div>
+                </div>
+                
+                {/* Action Buttons */}
+                {assistText && !assistLoading && (
+                  <div className="flex gap-1 ml-8">
+                    <button
+                      onClick={() => navigator.clipboard.writeText(assistText)}
+                      className="px-2 py-0.5 text-xs bg-white/80 border border-slate-200 rounded hover:bg-slate-50 transition-colors"
+                      title="Copy text"
+                    >
+                      📋
+                    </button>
+                    <button
+                      onClick={() => speak(assistText)}
+                      className="px-2 py-0.5 text-xs bg-white/80 border border-slate-200 rounded hover:bg-slate-50 transition-colors"
+                      title="Speak response"
+                    >
+                      🔊
+                    </button>
+                    <button
+                      onClick={onClear}
+                      className="px-2 py-0.5 text-xs bg-white/80 border border-slate-200 rounded hover:bg-slate-50 transition-colors"
+                      title="Clear chat"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center text-slate-500 py-4">
+                <div className="text-xl mb-1">💬</div>
+                <p className="text-xs">Ask me about your recipe</p>
+              </div>
+            )}
+          </div>
+
+          {/* Input Area - Minimized */}
+          <div className="px-3 py-2 border-t border-slate-200 bg-white rounded-b-xl">
+            <div className="flex gap-2">
+              <input
+                value={userText}
+                onChange={(e) => setUserText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && onSubmit()}
+                className="flex-1 px-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent placeholder-slate-400"
+                placeholder="Ask about the recipe..."
+                disabled={assistLoading}
+              />
+              <button
+                onClick={onSubmit}
+                disabled={!userText.trim() || assistLoading}
+                className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm rounded-lg hover:from-indigo-700 hover:to-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 font-medium"
+                title="Send message"
+              >
+                ➤
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Button - Always in same position */}
+      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50">
+        <button
+          onClick={onToggle}
+          className="w-12 h-12 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 flex items-center justify-center group"
+          title={isOpen ? "Close chat" : "Open AI chat"}
+        >
+          {isOpen ? (
+            <span className="text-base">✕</span>
+          ) : (
+            <div className="relative">
+              <span className="text-base">💬</span>
+              <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse"></div>
+            </div>
+          )}
+        </button>
+      </div>
+    </>
+  );
+}
