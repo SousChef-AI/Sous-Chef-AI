@@ -13,7 +13,8 @@ Unlike traditional AI recipe apps, it uses verified human-created recipes to ens
 - Project should open on localhost in a browser tab
 
 ## Key Features
-- Voice-controlled step-by-step cooking guidance  
+- Voice-controlled step-by-step cooking guidance
+- Voice control is activate by speaking "Hey Sous Chef", after which the AI will start listening to your request
 - Hands-free timers and instructions  
 - Ingredient quantity adjustments  
 - Nutritional breakdowns macros, calories, etc.
